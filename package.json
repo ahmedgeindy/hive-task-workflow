@@ -1,0 +1,46 @@
+{
+  "name": "@genidy/hive-task-workflow",
+  "version": "1.0.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "HiveCFM team git workflow: one work item = one branch = one PR. Per-task starter (branch name, branch from origin/development, commit template, PR draft) plus an agent skill that applies the rules.",
+  "type": "module",
+  "bin": {
+    "hive-task-workflow": "bin/cli.mjs",
+    "hive-task": "bin/hive-task.mjs"
+  },
+  "scripts": {
+    "test": "node bin/cli.mjs selftest"
+  },
+  "files": [
+    "bin",
+    "SKILL.md",
+    "README.md",
+    "docs",
+    "scripts"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ahmedgeindy/hive-task-workflow.git"
+  },
+  "homepage": "https://github.com/ahmedgeindy/hive-task-workflow#readme",
+  "bugs": {
+    "url": "https://github.com/ahmedgeindy/hive-task-workflow/issues"
+  },
+  "keywords": [
+    "git",
+    "workflow",
+    "conventional-commits",
+    "azure-devops",
+    "branch-naming",
+    "pull-request",
+    "claude-code",
+    "agent-skill"
+  ],
+  "author": "Ahmed Genidy"
+}

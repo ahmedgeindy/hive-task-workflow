@@ -1,0 +1,5 @@
+node_modules/
+*.tgz
+.DS_Store
+# maintainer-only leak audit: its rule lists name internal systems; never published
+tools/
