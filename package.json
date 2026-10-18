@@ -40,6 +40,11 @@
     "branch-naming",
     "pull-request",
     "claude-code",
+    "codex",
+    "copilot",
+    "cursor",
+    "gemini-cli",
+    "agent-skills",
     "agent-skill"
   ],
   "author": "Ahmed Genidy"

@@ -55,10 +55,85 @@ function gitVersion() {
   return m ? [Number(m[1]), Number(m[2])] : null
 }
 
-function skillTargets() {
-  // Claude Code user skills dir; CLAUDE_CONFIG_DIR overrides ~/.claude.
-  const base = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
-  return [join(base, 'skills', SKILL_NAME)]
+// Where each agent discovers user-level Agent Skills (SKILL.md folders, agentskills.io format).
+// Verified against each vendor's docs 2026-10-18 (URLs in README "Supported agents").
+// Agents that read the shared ~/.agents/skills folder share one copy, so picking several of
+// them installs once. `home` is the dir whose presence means "this agent is installed here".
+const H = () => homedir()
+const claudeHome = () => process.env.CLAUDE_CONFIG_DIR || join(H(), '.claude')
+const shared = () => join(H(), '.agents', 'skills')
+const AGENTS = [
+  { id: 'claude',   name: 'Claude Code',      home: claudeHome,                              skills: () => join(claudeHome(), 'skills') },
+  { id: 'codex',    name: 'OpenAI Codex CLI', home: () => join(H(), '.codex'),               skills: shared },
+  { id: 'copilot',  name: 'GitHub Copilot',   home: () => join(H(), '.copilot'),             skills: shared },
+  { id: 'cursor',   name: 'Cursor',           home: () => join(H(), '.cursor'),              skills: shared },
+  { id: 'gemini',   name: 'Gemini CLI',       home: () => join(H(), '.gemini'),              skills: shared },
+  { id: 'windsurf', name: 'Windsurf / Devin', home: () => join(H(), '.codeium', 'windsurf'), skills: shared },
+  { id: 'opencode', name: 'OpenCode',         home: () => join(H(), '.config', 'opencode'),  skills: shared },
+  { id: 'amp',      name: 'Amp',              home: () => join(H(), '.config', 'amp'),       skills: shared },
+  { id: 'kiro',     name: 'Kiro (IDE)',       home: () => join(H(), '.kiro'),                skills: () => join(H(), '.kiro', 'skills') },
+  { id: 'cline',    name: 'Cline',            home: () => join(H(), '.cline'),               skills: () => join(H(), '.cline', 'skills') },
+]
+// Project scope: <repo>/.agents/skills (Codex, Copilot, Cursor, Gemini, Windsurf, OpenCode, Amp)
+// and <repo>/.claude/skills (Claude Code, Cline). Commit them to share with the team.
+const PROJECT_DIRS = [
+  ['.agents', 'Codex, Copilot, Cursor, Gemini, Windsurf, OpenCode, Amp'],
+  ['.claude', 'Claude Code, Cline'],
+]
+
+function parseAgentList(value) {
+  const ids = String(value).split(',').map((v) => v.trim().toLowerCase()).filter(Boolean)
+  if (ids.includes('all')) return AGENTS
+  const unknown = ids.filter((id) => !AGENTS.some((a) => a.id === id))
+  if (unknown.length || !ids.length) {
+    fail(`unknown agent: ${unknown.join(', ') || '(empty)'}`, `known: ${AGENTS.map((a) => a.id).join(', ')}, all`, 'fix the --agent value')
+  }
+  return AGENTS.filter((a) => ids.includes(a.id))
+}
+
+async function chooseAgents(flag) {
+  if (flag !== undefined) return parseAgentList(flag)
+  const detected = AGENTS.filter((a) => existsSync(a.home()))
+  if (!process.stdin.isTTY) {
+    if (!detected.length) fail('no AI agent detected', 'none of the known agent config dirs exist', `pass --agent <${AGENTS.map((a) => a.id).join('|')}|all>`)
+    return detected
+  }
+  console.log('Which AI agents should get the skill?\n')
+  AGENTS.forEach((a, i) => console.log(`  ${String(i + 1).padStart(2)}) ${a.name.padEnd(18)} ${existsSync(a.home()) ? '(detected)' : ''}`))
+  console.log('   a) all')
+  const def = detected.map((a) => AGENTS.indexOf(a) + 1).join(',')
+  const { createInterface } = await import('node:readline/promises')
+  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  const answer = (await rl.question(`\nNumbers, comma-separated [${def || 'none detected'}]: `)).trim() || def
+  rl.close()
+  if (!answer) fail('no agent selected', 'empty choice and nothing detected', 're-run and pick at least one number')
+  if (answer.toLowerCase() === 'a') return AGENTS
+  const picked = answer.split(',').map((n) => AGENTS[Number(n.trim()) - 1])
+  if (picked.some((a) => !a)) fail(`invalid choice: ${answer}`, `use numbers 1-${AGENTS.length} or a`, 're-run setup')
+  console.log('')
+  return [...new Set(picked)]
+}
+
+function targetsFor(agents, project) {
+  // Map of skill dir -> agents served. Dedupes: several agents share ~/.agents/skills.
+  const map = new Map()
+  if (project) {
+    const root = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' })
+    if (root.status !== 0) fail('--project needs a git repo', `cwd = ${process.cwd()}`, 'cd into the repo you want to share the skill in')
+    for (const [d, who] of PROJECT_DIRS) map.set(join(root.stdout.trim(), d, 'skills', SKILL_NAME), who)
+    return map
+  }
+  for (const a of agents) {
+    const dir = join(a.skills(), SKILL_NAME)
+    map.set(dir, map.has(dir) ? `${map.get(dir)}, ${a.name}` : a.name)
+  }
+  return map
+}
+
+function flagValue(args, name) {
+  const i = args.findIndex((a) => a === name || a.startsWith(`${name}=`))
+  if (i < 0) return undefined
+  return args[i].includes('=') ? args[i].split('=').slice(1).join('=') : (args[i + 1] ?? '')
 }
 
 function installSkill(target) {
@@ -82,7 +157,9 @@ function installSkill(target) {
   try { rmSync(old, { recursive: true, force: true }) } catch { console.log(`  INFO could not remove ${old} (in use?) - delete it later`) }
 }
 
-function setup() {
+async function setup(args) {
+  const project = args.includes('--project')
+  const agents = project ? [] : await chooseAgents(flagValue(args, '--agent'))
   const checks = []
   const tick = (ok, label, hint = '') => { checks.push(ok); console.log(`  ${ok ? 'OK  ' : 'FAIL'} ${label}${!ok && hint ? `\n       -> ${hint}` : ''}`) }
   console.log(`${PKG.name}@${PKG.version} setup\n`)
@@ -93,8 +170,8 @@ function setup() {
   const ps = findPowerShell()
   tick(!!ps, `PowerShell ${ps ? `${ps.version} (${ps.exe})` : 'not found'}`, IS_WINDOWS ? 'powershell.exe missing from PATH' : 'install pwsh: https://aka.ms/powershell')
 
-  for (const target of skillTargets()) {
-    try { installSkill(target); tick(existsSync(join(target, 'SKILL.md')) && existsSync(join(target, 'scripts', 'hive-task.ps1')), `skill installed: ${target}`) }
+  for (const [target, who] of targetsFor(agents, project)) {
+    try { installSkill(target); tick(existsSync(join(target, 'SKILL.md')) && existsSync(join(target, 'scripts', 'hive-task.ps1')), `skill -> ${target}  [${who}]`) }
     catch (e) { tick(false, `skill install to ${target}`, e.message) }
   }
 
@@ -107,16 +184,33 @@ function setup() {
 
   const ok = checks.every(Boolean)
   console.log(ok
-    ? `\nReady. Restart Claude Code so the skill loads. Start a task with:\n  npx ${PKG.name} start <work-item-id> -Scope <module>`
+    ? `\nReady. Restart your AI agent(s) so the skill loads.${project ? ' Commit the new .agents/ and .claude/ skill folders to share it with the team.' : ''}\nStart a task with:\n  npx ${PKG.name} start <work-item-id> -Scope <module>`
     : '\nSetup incomplete - fix the FAIL lines above and re-run.')
   process.exit(ok ? 0 : 1)
+}
+
+function remove(args) {
+  const project = args.includes('--project')
+  const flag = flagValue(args, '--agent')
+  const agents = project ? [] : flag !== undefined ? parseAgentList(flag) : AGENTS
+  let n = 0
+  for (const [target] of targetsFor(agents, project)) {
+    if (!existsSync(target)) continue
+    if (!existsSync(join(target, MARKER))) { console.log(`  SKIP ${target} (not installed by ${PKG.name})`); continue }
+    rmSync(target, { recursive: true, force: true }); n++
+    console.log(`  removed ${target}`)
+  }
+  console.log(n ? 'Done.' : 'Nothing to remove.')
 }
 
 function usage(code = 0) {
   console.log(`${PKG.name}@${PKG.version}
 
 Usage:
-  npx ${PKG.name} setup                 install the agent skill and check prerequisites
+  npx ${PKG.name} setup                 pick AI agents, install the skill, check prerequisites
+      --agent <list>                   skip the prompt: ${AGENTS.map((a) => a.id).join(',')} or all
+      --project                        install into this repo (.agents/ + .claude/) to commit for the team
+  npx ${PKG.name} remove [--agent <list>] [--project]   uninstall the skill
   npx ${PKG.name} start <id> [options]  start a task: branch + commit template + PR draft
   npx ${PKG.name} guide                 print the team git workflow guide
   npx ${PKG.name} selftest              run the bundled unit tests
@@ -131,7 +225,8 @@ const argv = process.argv.slice(2)
 const cmd = argv.shift()
 
 switch (cmd) {
-  case 'setup': setup(); break
+  case 'setup': await setup(argv); break
+  case 'remove': remove(argv); break
   case 'start':
     if (['-h', '--help', 'help', '/?'].includes(argv[0])) usage(0)
     if (!/^(\d+|noref)$/i.test(argv[0] || '')) fail('missing work-item id', `start needs <id> or noref first, got '${argv[0] ?? ''}'`, `npx ${PKG.name} start 4821 -Scope sso`)

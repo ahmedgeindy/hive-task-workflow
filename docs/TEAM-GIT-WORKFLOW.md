@@ -121,8 +121,10 @@ SemVer with a `v` prefix (`v4.6.0`, RCs `v4.6.0-rc.1`), annotated tags only (`gi
 move or re-push a tag — ship a new patch. No floating tags (`stable`). Customer/on-prem lines are
 namespaced (`ucc/v4.6.0`).
 
-## 7. For Claude Code users
+## 7. For AI agent users (Claude Code, Codex, Copilot, Cursor, Gemini, Windsurf, ...)
 
-`npx @genidy/hive-task-workflow setup` installs the **`hive-task-workflow`** skill into
-`~/.claude/skills/`. Restart Claude Code; the skill then applies all of the above when you say
-"start task 4821", "commit this", or "write the PR". It never opens a PR unless you explicitly ask.
+`npx @genidy/hive-task-workflow setup` asks which agents you use and installs the
+**`hive-task-workflow`** skill for each. Restart the agent; it then applies all of the above when you
+say "start task 4821", "commit this", or "write the PR", and never opens a PR unless you explicitly
+ask. To give it to the whole team without installs, run `setup --project` in the repo and commit
+the generated `.agents/` and `.claude/` folders.
