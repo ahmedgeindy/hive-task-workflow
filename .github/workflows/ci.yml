@@ -1,0 +1,43 @@
+name: CI
+
+# Runs the bundled PowerShell self-test, and (once added) the end-to-end suite,
+# on Linux and Windows. Both bundled entry points are covered: `npm test` goes
+# through bin/cli.mjs, which picks powershell.exe on Windows and pwsh elsewhere,
+# and the direct pwsh step runs the same file under PowerShell 7 on both systems.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Tool versions
+        shell: pwsh
+        run: |
+          node --version
+          git --version
+          $PSVersionTable.PSVersion.ToString()
+
+      - name: Self-test through the CLI (npm test)
+        run: npm test
+
+      - name: Self-test directly under pwsh
+        shell: pwsh
+        run: ./scripts/test/HiveTask.tests.ps1
