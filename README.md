@@ -124,3 +124,12 @@ npx @genidy/hive-task-workflow selftest   # run the bundled unit tests
 ## Requirements
 
 Node 18+, Git 2.31+, Windows PowerShell 5.1+ (macOS/Linux: PowerShell 7 `pwsh`).
+
+## Development
+
+```bash
+npm test          # PowerShell self-test of the pure helpers (needs powershell.exe or pwsh)
+npm run test:e2e  # end-to-end: start, setup and remove against a throwaway git repo and fake home
+```
+
+CI runs both on Ubuntu and Windows for every pull request and every push to `main`.

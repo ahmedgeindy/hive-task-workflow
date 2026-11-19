@@ -11,7 +11,8 @@
     "hive-task": "bin/hive-task.mjs"
   },
   "scripts": {
-    "test": "node bin/cli.mjs selftest"
+    "test": "node bin/cli.mjs selftest",
+    "test:e2e": "node --test test/start.e2e.test.mjs test/setup.e2e.test.mjs"
   },
   "files": [
     "bin",
