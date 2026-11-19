@@ -15,8 +15,17 @@ export function tempDir(prefix) {
   return realpathSync(mkdtempSync(join(tmpdir(), `hive-e2e-${prefix}-`)))
 }
 
+// On Windows a just-exited git or PowerShell process can still hold a directory
+// for a moment (EBUSY), so retry, and never let a leftover temp dir fail a test
+// whose assertions already passed. The OS temp folder is cleaned up eventually.
 export function cleanup(...dirs) {
-  for (const d of dirs) rmSync(d, { recursive: true, force: true, maxRetries: 3 })
+  for (const d of dirs) {
+    try {
+      rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+    } catch (e) {
+      if (!['EBUSY', 'EPERM', 'ENOTEMPTY'].includes(e.code)) throw e
+    }
+  }
 }
 
 export function git(cwd, ...args) {
